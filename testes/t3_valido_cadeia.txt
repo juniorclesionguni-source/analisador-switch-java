@@ -1,0 +1,6 @@
+int a = 1;
+int b = 2;
+int p;
+int q;
+switch (a) { case 1: p = 100; break; }
+switch (b) { case 2: q = 200; break; }

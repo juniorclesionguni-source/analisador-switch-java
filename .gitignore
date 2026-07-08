@@ -1,0 +1,11 @@
+# Compilacao Java
+out/
+*.class
+
+# IDEs e configuracoes locais
+.idea/
+*.iml
+
+# Sistema operativo
+Thumbs.db
+.DS_Store

@@ -1,0 +1,12 @@
+int dia = 3;
+String mensagem;
+switch (dia) {
+    case 1:
+        mensagem = "Segunda";
+        break;
+    case 2:
+        mensagem = "Terca";
+        break;
+    default:
+        mensagem = "Outro";
+}

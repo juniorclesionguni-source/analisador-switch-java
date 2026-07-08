@@ -1,0 +1,10 @@
+final int K = 5;
+int dia = 3;
+switch (dia) {
+    case "x":
+        K = 6;
+        z = 1;
+        break
+    case 2:
+        dia = "ola";
+}
