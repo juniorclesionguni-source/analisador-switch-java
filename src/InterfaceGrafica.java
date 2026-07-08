@@ -27,8 +27,11 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -36,6 +39,8 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -61,6 +66,7 @@ public class InterfaceGrafica extends JFrame {
     private static final Color SELECAO = new Color(220, 167, 158);
 
     private final JTextArea editorFonte = new JTextArea();
+    private final JTextArea numerosLinhas = new JTextArea("1");
     private final JTextArea codigoNumerado = new JTextArea();
     private final JTable tabelaLexemas = criarTabela();
     private final JTable tabelaSimbolos = criarTabela();
@@ -106,7 +112,13 @@ public class InterfaceGrafica extends JFrame {
 
         JPanel topo = new JPanel(new BorderLayout(8, 0));
         topo.setBackground(PAINEL_ROSA_CAFE);
-        topo.setBorder(BorderFactory.createEmptyBorder(10, 10, 8, 10));
+        topo.setBorder(BorderFactory.createEmptyBorder(12, 12, 10, 12));
+
+        JLabel titulo = new JLabel("Analisador SWITCH");
+        titulo.setForeground(CAFE_ESCURO);
+        titulo.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+        titulo.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 12));
+        topo.add(titulo, BorderLayout.WEST);
 
         campoFicheiro.setEditable(false);
         campoFicheiro.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
@@ -142,6 +154,7 @@ public class InterfaceGrafica extends JFrame {
         editorFonte.setSelectionColor(SELECAO);
         editorFonte.setSelectedTextColor(CAFE_ESCURO);
         editorFonte.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        configurarNumerosLinhas();
 
         codigoNumerado.setEditable(false);
         codigoNumerado.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
@@ -159,10 +172,13 @@ public class InterfaceGrafica extends JFrame {
         abas.addTab("Simbolos", criarRolagem(tabelaSimbolos));
         abas.addTab("Erros", criarRolagem(tabelaErros));
 
+        JScrollPane rolagemEditor = criarRolagem(editorFonte);
+        rolagemEditor.setRowHeaderView(numerosLinhas);
+
         JSplitPane divisao = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
-                criarRolagem(editorFonte),
-                abas
+                criarSecao("Codigo fonte", rolagemEditor),
+                criarSecao("Resultados", abas)
         );
         divisao.setResizeWeight(0.46);
         divisao.setDividerLocation(520);
@@ -215,7 +231,17 @@ public class InterfaceGrafica extends JFrame {
     }
 
     private JTable criarTabela() {
-        JTable tabela = new JTable();
+        JTable tabela = new JTable() {
+            @Override
+            public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
+                Component componente = super.prepareRenderer(renderer, row, column);
+                if (!isRowSelected(row)) {
+                    componente.setBackground(row % 2 == 0 ? LINHA_CLARA : new Color(248, 236, 232));
+                    componente.setForeground(CAFE_ESCURO);
+                }
+                return componente;
+            }
+        };
         tabela.setAutoCreateRowSorter(true);
         tabela.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         tabela.setFillsViewportHeight(true);
@@ -234,6 +260,23 @@ public class InterfaceGrafica extends JFrame {
         return tabela;
     }
 
+    private JPanel criarSecao(String titulo, Component conteudo) {
+        JPanel painel = new JPanel(new BorderLayout());
+        painel.setBackground(FUNDO_CREME);
+        painel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+
+        JLabel cabecalho = new JLabel(titulo);
+        cabecalho.setOpaque(true);
+        cabecalho.setBackground(CAFE);
+        cabecalho.setForeground(Color.WHITE);
+        cabecalho.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+        cabecalho.setBorder(BorderFactory.createEmptyBorder(7, 10, 7, 10));
+
+        painel.add(cabecalho, BorderLayout.NORTH);
+        painel.add(conteudo, BorderLayout.CENTER);
+        return painel;
+    }
+
     private JScrollPane criarRolagem(Component componente) {
         JScrollPane scroll = new JScrollPane(componente);
         scroll.setBorder(BorderFactory.createLineBorder(BORDA_SUAVE));
@@ -243,18 +286,70 @@ public class InterfaceGrafica extends JFrame {
 
     private void estilizarBotao(JButton botao, boolean destaque) {
         botao.setFocusPainted(false);
+        botao.setOpaque(true);
         botao.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(destaque ? CAFE_ESCURO : ROSA_CAFE),
                 BorderFactory.createEmptyBorder(6, 14, 6, 14)
         ));
-        botao.setBackground(destaque ? CAFE : ROSA_CAFE);
+        Color normal = destaque ? CAFE : ROSA_CAFE;
+        Color hover = destaque ? CAFE_ESCURO : new Color(170, 103, 101);
+        botao.setBackground(normal);
         botao.setForeground(Color.WHITE);
         botao.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        botao.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                botao.setBackground(hover);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                botao.setBackground(normal);
+            }
+        });
     }
 
     private void estilizarMenu(JMenu menu) {
         menu.setForeground(Color.WHITE);
         menu.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+    }
+
+    private void configurarNumerosLinhas() {
+        numerosLinhas.setEditable(false);
+        numerosLinhas.setFocusable(false);
+        numerosLinhas.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+        numerosLinhas.setBackground(new Color(239, 220, 214));
+        numerosLinhas.setForeground(CAFE);
+        numerosLinhas.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        numerosLinhas.setColumns(3);
+
+        editorFonte.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                atualizarNumerosLinhas();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                atualizarNumerosLinhas();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                atualizarNumerosLinhas();
+            }
+        });
+        atualizarNumerosLinhas();
+    }
+
+    private void atualizarNumerosLinhas() {
+        int total = Math.max(1, editorFonte.getLineCount());
+        int largura = String.valueOf(total).length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= total; i++) {
+            sb.append(String.format("%" + largura + "d%n", i));
+        }
+        numerosLinhas.setText(sb.toString());
     }
 
     private void abrirFicheiro(ActionEvent e) {
