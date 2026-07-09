@@ -3,6 +3,12 @@ import erros.Erro;
 import lexico.Lexer;
 import lexico.Token;
 import semantico.AnalisadorSemantico;
+import sintatico.Atribuicao;
+import sintatico.Caso;
+import sintatico.ComandoBreak;
+import sintatico.ComandoSwitch;
+import sintatico.Declaracao;
+import sintatico.Instrucao;
 import sintatico.Parser;
 import sintatico.Programa;
 import tabelas.Simbolo;
@@ -36,8 +42,13 @@ import javax.swing.table.TableColumnModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.BasicStroke;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -69,6 +80,7 @@ public class InterfaceGrafica extends JFrame {
     private final JTextArea numerosLinhas = new JTextArea("1");
     private final JTextArea codigoNumerado = new JTextArea();
     private final JTable tabelaLexemas = criarTabela();
+    private final PainelArvoreAst arvoreAst = new PainelArvoreAst();
     private final JTable tabelaSimbolos = criarTabela();
     private final JTable tabelaErros = criarTabela();
     private final JTextField campoFicheiro = new JTextField();
@@ -169,6 +181,7 @@ public class InterfaceGrafica extends JFrame {
         abas.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
         abas.addTab("Codigo numerado", criarRolagem(codigoNumerado));
         abas.addTab("Lexemas", criarRolagem(tabelaLexemas));
+        abas.addTab("Arvore (AST)", criarRolagem(arvoreAst));
         abas.addTab("Simbolos", criarRolagem(tabelaSimbolos));
         abas.addTab("Erros", criarRolagem(tabelaErros));
 
@@ -243,7 +256,7 @@ public class InterfaceGrafica extends JFrame {
             }
         };
         tabela.setAutoCreateRowSorter(true);
-        tabela.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        tabela.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         tabela.setFillsViewportHeight(true);
         tabela.setRowHeight(26);
         tabela.setGridColor(new Color(226, 202, 195));
@@ -258,6 +271,212 @@ public class InterfaceGrafica extends JFrame {
         tabela.getTableHeader().setForeground(Color.WHITE);
         tabela.getTableHeader().setOpaque(true);
         return tabela;
+    }
+
+    // Constrói a árvore (nós + filhos) a partir da AST do parser: cadeia =
+    // switches irmãos sob PROGRAMA; aninhamento = SWITCH filho de um CASE.
+    private void preencherArvore(Programa programa) {
+        NoDesenho raiz = new NoDesenho("PROGRAMA");
+        for (Declaracao d : programa.declaracoes) {
+            NoDesenho decl = new NoDesenho("declaracao");
+            decl.filhos.add(new NoDesenho(d.tipo));
+            decl.filhos.add(new NoDesenho(d.identificador));
+            if (d.valorLexema != null) {
+                decl.filhos.add(new NoDesenho("= " + d.valorLexema));
+            }
+            raiz.filhos.add(decl);
+        }
+        for (ComandoSwitch s : programa.switches) {
+            raiz.filhos.add(noSwitch(s));
+        }
+        arvoreAst.setRaiz(raiz);
+    }
+
+    private NoDesenho noSwitch(ComandoSwitch s) {
+        NoDesenho no = new NoDesenho("switch (" + s.selector + ")");
+        for (Caso c : s.casos) {
+            no.filhos.add(noCaso(c));
+        }
+        if (s.casoDefault != null) {
+            no.filhos.add(noCaso(s.casoDefault));
+        }
+        return no;
+    }
+
+    private NoDesenho noCaso(Caso c) {
+        NoDesenho no = new NoDesenho(c.ehDefault ? "default" : "case " + c.rotuloLexema);
+        for (Instrucao i : c.instrucoes) {
+            if (i instanceof ComandoSwitch) {
+                no.filhos.add(noSwitch((ComandoSwitch) i)); // aninhamento
+            } else if (i instanceof Atribuicao) {
+                Atribuicao a = (Atribuicao) i;
+                NoDesenho atr = new NoDesenho("=");
+                atr.filhos.add(new NoDesenho(a.destino));
+                atr.filhos.add(new NoDesenho(a.valorLexema));
+                no.filhos.add(atr);
+            } else if (i instanceof ComandoBreak) {
+                no.filhos.add(new NoDesenho("break"));
+            }
+        }
+        return no;
+    }
+
+    /** Nó simples para desenho: texto + filhos. */
+    private static class NoDesenho {
+        final String texto;
+        final List<NoDesenho> filhos = new ArrayList<>();
+
+        NoDesenho(String texto) {
+            this.texto = texto;
+        }
+    }
+
+    /**
+     * Painel que DESENHA a AST como um diagrama clássico de árvore (estilo dos
+     * slides de Compiladores): nó pai em cima, linhas em leque para os filhos.
+     * A largura de cada subárvore é calculada recursivamente para os ramos não
+     * se sobreporem.
+     */
+    private static class PainelArvoreAst extends JPanel implements javax.swing.Scrollable {
+
+        private static final int ALTURA_NIVEL = 70; // distância vertical entre níveis
+        private static final int ESPACO = 40;       // espaço horizontal entre subárvores
+        private static final int MARGEM = 20;
+
+        private NoDesenho raiz;
+
+        PainelArvoreAst() {
+            setBackground(LINHA_CLARA);
+            setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        }
+
+        void setRaiz(NoDesenho raiz) {
+            this.raiz = raiz;
+            revalidate(); // recalcula o preferredSize para o scroll
+            repaint();
+        }
+
+        // Ocupa sempre exactamente o viewport do JScrollPane: o desenho é
+        // escalado (zoom-to-fit), por isso nunca há partes fora do ecrã.
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return true;
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) {
+            return 16;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) {
+            return 64;
+        }
+
+        /** Largura em píxeis da subárvore: máx(texto, soma dos filhos). */
+        private int larguraSubarvore(NoDesenho no, FontMetrics fm) {
+            int larguraTexto = fm.stringWidth(no.texto) + 16;
+            if (no.filhos.isEmpty()) {
+                return larguraTexto;
+            }
+            int somaFilhos = 0;
+            for (NoDesenho f : no.filhos) {
+                somaFilhos += larguraSubarvore(f, fm) + ESPACO;
+            }
+            somaFilhos -= ESPACO;
+            return Math.max(larguraTexto, somaFilhos);
+        }
+
+        private int profundidade(NoDesenho no) {
+            int max = 0;
+            for (NoDesenho f : no.filhos) {
+                max = Math.max(max, profundidade(f));
+            }
+            return 1 + max;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            if (raiz == null) {
+                return new Dimension(400, 300);
+            }
+            FontMetrics fm = getFontMetrics(getFont());
+            return new Dimension(
+                    larguraSubarvore(raiz, fm) + 2 * MARGEM,
+                    profundidade(raiz) * ALTURA_NIVEL + 2 * MARGEM);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (raiz == null) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g2.setStroke(new BasicStroke(1.4f));
+            FontMetrics fm = g2.getFontMetrics();
+
+            // Zoom-to-fit: se a árvore for maior que o painel, reduz a escala
+            // para caber TODA no ecrã (nunca amplia acima de 1:1).
+            int larguraArvore = larguraSubarvore(raiz, fm) + 2 * MARGEM;
+            int alturaArvore = profundidade(raiz) * ALTURA_NIVEL + 2 * MARGEM;
+            double escala = Math.min(1.0, Math.min(
+                    getWidth() / (double) larguraArvore,
+                    getHeight() / (double) alturaArvore));
+
+            // Centra horizontalmente o espaço que sobra.
+            double sobraX = getWidth() - larguraArvore * escala;
+            g2.translate(Math.max(0, sobraX / 2), 0);
+            g2.scale(escala, escala);
+
+            desenhar(g2, fm, raiz, MARGEM, MARGEM + fm.getAscent());
+            g2.dispose();
+        }
+
+        /**
+         * Desenha o nó centrado no seu intervalo [x, x+largura] no nível ySup e,
+         * recursivamente, os filhos no nível abaixo, ligados por linhas.
+         */
+        private void desenhar(Graphics2D g2, FontMetrics fm, NoDesenho no, int x, int ySup) {
+            int largura = larguraSubarvore(no, fm);
+            int centroX = x + largura / 2;
+
+            g2.setColor(CAFE_ESCURO);
+            g2.drawString(no.texto, centroX - fm.stringWidth(no.texto) / 2, ySup);
+
+            int filhoX = x + Math.max(0, (largura - larguraFilhos(no, fm)) / 2);
+            int yFilho = ySup + ALTURA_NIVEL;
+            for (NoDesenho f : no.filhos) {
+                int larguraFilho = larguraSubarvore(f, fm);
+                int centroFilhoX = filhoX + larguraFilho / 2;
+
+                g2.setColor(ROSA_CAFE);
+                g2.drawLine(centroX, ySup + 5, centroFilhoX, yFilho - fm.getAscent() - 3);
+
+                desenhar(g2, fm, f, filhoX, yFilho);
+                filhoX += larguraFilho + ESPACO;
+            }
+        }
+
+        private int larguraFilhos(NoDesenho no, FontMetrics fm) {
+            int soma = 0;
+            for (NoDesenho f : no.filhos) {
+                soma += larguraSubarvore(f, fm) + ESPACO;
+            }
+            return Math.max(0, soma - ESPACO);
+        }
     }
 
     private JPanel criarSecao(String titulo, Component conteudo) {
@@ -281,6 +500,8 @@ public class InterfaceGrafica extends JFrame {
         JScrollPane scroll = new JScrollPane(componente);
         scroll.setBorder(BorderFactory.createLineBorder(BORDA_SUAVE));
         scroll.getViewport().setBackground(LINHA_CLARA);
+        scroll.setBackground(LINHA_CLARA);
+        scroll.setCorner(JScrollPane.UPPER_RIGHT_CORNER, new JPanel());
         return scroll;
     }
 
@@ -415,6 +636,7 @@ public class InterfaceGrafica extends JFrame {
 
         preencherCodigoNumerado(fonte);
         preencherLexemas(resultado.tokens);
+        preencherArvore(resultado.programa);
         preencherSimbolos(resultado.simbolos);
         preencherErros(resultado.erros);
 
@@ -441,6 +663,7 @@ public class InterfaceGrafica extends JFrame {
         TabelaLexemas tabelaLexemas = new TabelaLexemas(todosTokens);
         return new ResultadoAnalise(
                 tabelaLexemas.tokens(),
+                programa,
                 new ArrayList<>(tabelaSimbolos.todos()),
                 new ArrayList<>(erros.lista())
         );
@@ -600,11 +823,14 @@ public class InterfaceGrafica extends JFrame {
 
     private static class ResultadoAnalise {
         private final List<Token> tokens;
+        private final Programa programa;
         private final List<Simbolo> simbolos;
         private final List<Erro> erros;
 
-        private ResultadoAnalise(List<Token> tokens, List<Simbolo> simbolos, List<Erro> erros) {
+        private ResultadoAnalise(List<Token> tokens, Programa programa,
+                                 List<Simbolo> simbolos, List<Erro> erros) {
             this.tokens = tokens;
+            this.programa = programa;
             this.simbolos = simbolos;
             this.erros = erros;
         }

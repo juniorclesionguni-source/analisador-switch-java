@@ -65,6 +65,6 @@ public class Main {
         // Saída — as quatro tabelas.
         TabelaLexemas tabelaLexemas = new TabelaLexemas(tokens);
         Relatorio relatorio = new Relatorio();
-        relatorio.imprimirTudo(fonte, tabelaLexemas.tokens(), tabelaSimbolos.todos(), erros.lista());
+        relatorio.imprimirTudo(fonte, tabelaLexemas.tokens(), programa, tabelaSimbolos.todos(), erros.lista());
     }
 }

@@ -2,11 +2,19 @@ package relatorio;
 
 import erros.Erro;
 import lexico.Token;
+import sintatico.Atribuicao;
+import sintatico.Caso;
+import sintatico.ComandoBreak;
+import sintatico.ComandoSwitch;
+import sintatico.Declaracao;
+import sintatico.Instrucao;
+import sintatico.Programa;
 import tabelas.Simbolo;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Scanner;
 
 /**
  * Módulo de saída / relatório (Secção 9).
@@ -19,13 +27,44 @@ import java.util.List;
  */
 public class Relatorio {
 
-    public void imprimirTudo(String fonte, List<Token> tokens,
+    /**
+     * Apresentação FASEADA: cada fase do compilador aparece por ordem, com uma
+     * pausa (ENTER) entre elas, para acompanhar o fluxo Léxica -> Sintáctica ->
+     * Semântica. Se a entrada não for interactiva (pipe/redireccionamento), as
+     * pausas são ignoradas e tudo é impresso de seguida.
+     */
+    public void imprimirTudo(String fonte, List<Token> tokens, Programa programa,
                              Collection<Simbolo> simbolos, List<Erro> erros) {
         imprimirCabecalho();
         imprimirCodigoFonte(fonte);
+
+        pausa();
+        System.out.println();
+        System.out.println(">>> FASE 1 — ANÁLISE LÉXICA (código -> tokens)");
         imprimirTabelaLexemas(tokens);
+
+        pausa();
+        System.out.println();
+        System.out.println(">>> FASE 2 — ANÁLISE SINTÁCTICA (tokens -> árvore sintáctica)");
+        imprimirArvore(programa);
+
+        pausa();
+        System.out.println();
+        System.out.println(">>> FASE 3 — ANÁLISE SEMÂNTICA (árvore + tabela de símbolos -> validação)");
         imprimirTabelaSimbolos(simbolos);
         imprimirErros(erros);
+    }
+
+    // ponytail: Scanner partilhado; System.console()==null => não interactivo, sem pausas
+    private final Scanner teclado = new Scanner(System.in);
+
+    private void pausa() {
+        if (System.console() == null) {
+            return;
+        }
+        System.out.println();
+        System.out.print("--- Prima ENTER para ver a fase seguinte ---");
+        teclado.nextLine();
     }
 
     // ----------------------------------------------------------------------
@@ -90,6 +129,64 @@ public class Relatorio {
                 return "Simbolo especial";
             default:
                 return token.classe.name();
+        }
+    }
+
+    // Árvore sintáctica (AST) ----------------------------------------------
+    // Imprime a árvore com ramos ASCII (├── └──), no estilo do comando 'tree',
+    // para se ver de imediato a hierarquia: cadeia = irmãos ao nível de
+    // PROGRAMA; aninhamento = um SWITCH como filho de um CASE.
+    private void imprimirArvore(Programa programa) {
+        System.out.println();
+        System.out.println("== ÁRVORE SINTÁCTICA (AST) ==");
+        System.out.println("PROGRAMA");
+
+        List<Object> filhos = new ArrayList<>();
+        filhos.addAll(programa.declaracoes);
+        filhos.addAll(programa.switches);
+        for (int i = 0; i < filhos.size(); i++) {
+            imprimirNo(filhos.get(i), "", i == filhos.size() - 1);
+        }
+    }
+
+    /** Imprime um nó e, recursivamente, os seus filhos. */
+    private void imprimirNo(Object no, String prefixo, boolean ultimo) {
+        String ramo = ultimo ? "└── " : "├── ";
+        String prefixoFilhos = prefixo + (ultimo ? "    " : "│   ");
+
+        if (no instanceof Declaracao) {
+            Declaracao d = (Declaracao) no;
+            String init = (d.valorLexema != null) ? " = " + d.valorLexema : "";
+            System.out.println(prefixo + ramo + "DECLARACAO [" + d.categoria.descricao()
+                    + "] " + d.tipo + " " + d.identificador + init + "   (linha " + d.linha + ")");
+
+        } else if (no instanceof ComandoSwitch) {
+            ComandoSwitch s = (ComandoSwitch) no;
+            System.out.println(prefixo + ramo + "SWITCH (" + s.selector + ")   (linha " + s.linha + ")");
+            List<Caso> casos = new ArrayList<>(s.casos);
+            if (s.casoDefault != null) {
+                casos.add(s.casoDefault);
+            }
+            for (int i = 0; i < casos.size(); i++) {
+                imprimirNo(casos.get(i), prefixoFilhos, i == casos.size() - 1);
+            }
+
+        } else if (no instanceof Caso) {
+            Caso c = (Caso) no;
+            String rotulo = c.ehDefault ? "DEFAULT" : "CASE " + c.rotuloLexema;
+            System.out.println(prefixo + ramo + rotulo + "   (linha " + c.linha + ")");
+            for (int i = 0; i < c.instrucoes.size(); i++) {
+                imprimirNo(c.instrucoes.get(i), prefixoFilhos, i == c.instrucoes.size() - 1);
+            }
+
+        } else if (no instanceof Atribuicao) {
+            Atribuicao a = (Atribuicao) no;
+            System.out.println(prefixo + ramo + "ATRIBUICAO " + a.destino + " = "
+                    + a.valorLexema + "   (linha " + a.linha + ")");
+
+        } else if (no instanceof ComandoBreak) {
+            Instrucao b = (ComandoBreak) no;
+            System.out.println(prefixo + ramo + "BREAK   (linha " + b.linha + ")");
         }
     }
 
