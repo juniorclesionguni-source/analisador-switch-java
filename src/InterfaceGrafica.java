@@ -181,9 +181,9 @@ public class InterfaceGrafica extends JFrame {
         abas.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
         abas.addTab("Codigo numerado", criarRolagem(codigoNumerado));
         abas.addTab("Lexemas", criarRolagem(tabelaLexemas));
-        abas.addTab("Arvore (AST)", criarRolagem(arvoreAst));
         abas.addTab("Simbolos", criarRolagem(tabelaSimbolos));
         abas.addTab("Erros", criarRolagem(tabelaErros));
+        abas.addTab("Arvore (AST)", criarRolagem(arvoreAst));
         abas.addTab("Gramatica", criarRolagem(criarPainelGramatica()));
 
         JScrollPane rolagemEditor = criarRolagem(editorFonte);
