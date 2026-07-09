@@ -119,6 +119,54 @@ G = ({<programa>, <lista_decl>, <declaracao>, <tipo>, <lista_switch>,
 - Regra **20** (`<instrucao> ::= <switch>`) → **aninhamento** sem limite.
 - Regra **9** (`<lista_switch>` recursiva) → switches em **cadeia**.
 
+### Que tipo de gramática é esta?
+
+É uma **gramática livre de contexto** (GLC) — **Tipo 2 na hierarquia de
+Chomsky**: todas as produções têm um único não-terminal à esquerda
+(`<A> ::= α`). É o tipo usado para a sintaxe de linguagens de programação
+porque expressa estruturas **recursivas/aninhadas** (switch dentro de switch),
+o que uma gramática regular (Tipo 3) não consegue. Os tokens em si (`ident`,
+`lit_int`) são regulares — por isso ficam a cargo do lexer, e a GLC trata só
+da estrutura.
+
+Além disso a gramática é **LL(1)**:
+
+- **LL** — lê a entrada da esquerda para a direita (*Left-to-right*),
+  construindo a derivação mais à esquerda (*Leftmost*);
+- **(1)** — basta **1 token de lookahead** para escolher a produção: se o
+  token é `switch`, `final`, `case` ou `break`, cada um determina uma regra
+  diferente, sem ambiguidade nem backtracking.
+
+É exactamente essa propriedade que permite implementar a gramática como
+**parser descendente recursivo** — cada não-terminal vira um método e um `if`
+sobre o token actual escolhe a produção. Se houvesse recursão à esquerda
+(`<A> ::= <A> x`) ou duas produções começadas pelo mesmo token, LL(1) falharia
+e seria preciso transformar a gramática ou usar um parser LR (tabular).
+
+### Dava para simplificar a gramática?
+
+**Em BNF pura (a notação das aulas): pouco.** BNF pura não tem `|` na mesma
+linha nem `[ ]` opcional — cada alternativa tem de ser uma regra própria, e é
+por isso que são 28. Podia-se raspar 3–4 regras (eliminar `<selector>` e
+`<constante>`, fundir as regras 11/12 com um `<default> ::= ϵ`), mas isso
+piora a legibilidade: esses não-terminais existem para dar nome aos conceitos
+do enunciado.
+
+**Em EBNF: sim, encolhe para metade.** Com `|`, `[ ]` (opcional) e `{ }`
+(repetição), as 28 regras viram ~10 linhas:
+
+```
+<programa>   ::= { <declaracao> ; } <switch> { <switch> }
+<declaracao> ::= [ final ] <tipo> ident [ = <valor> ]
+<switch>     ::= switch ( ident ) { <caso> { <caso> } [ <default> ] }
+```
+
+Mantivemos a **BNF pura com listas recursivas** porque é a notação dos
+apontamentos (F5): "listas sintácticas são descritas usando recursão" — as
+regras 2, 9, 14 e 18 são exactamente essas listas. Resposta pronta para a
+defesa: *"dava para compactar em EBNF, mas mantivemos BNF pura com recursão,
+como nas aulas."*
+
 ### Parser descendente recursivo
 
 **Cada não-terminal da gramática é um método Java** com o mesmo nome:
@@ -190,7 +238,10 @@ if (verificaLexema("switch")) {
 }
 ```
 
-Exemplo — para este código:
+### As DUAS árvores: derivação vs. AST
+
+O projecto mostra duas árvores na interface, e a diferença entre elas é
+matéria clássica de defesa. Para este código:
 
 ```java
 switch (opcao) {
@@ -199,21 +250,65 @@ switch (opcao) {
 }
 ```
 
-a AST fica:
+**1. Árvore de sintaxe / de derivação** (aba "Arvore de sintaxe" — notação dos
+apontamentos F3): a raiz é o símbolo inicial e cada nó não-terminal expande
+**nos símbolos do lado direito da regra BNF aplicada**, com os terminais
+(incluindo `(`, `{`, `:`, `;`) como folhas e `ϵ` nas regras vazias:
+
+```
+<programa>
+├── <lista_decl>
+│   └── ϵ
+└── <lista_switch>
+    └── <switch>
+        ├── switch ( <selector> ) {
+        │            └── opcao
+        ├── <lista_caso>
+        │   └── <caso>
+        │       ├── case <constante> :
+        │       │         └── 1
+        │       └── <lista_instr>
+        │           ├── <instrucao>
+        │           │   └── <atribuicao>
+        │           │       ├── mensagem = <valor> ;
+        │           │       │              └── <constante>
+        │           │       │                  └── "um"
+        │           ├── <lista_instr>
+        │           │   ├── <instrucao>
+        │           │   │   └── <break>  → break ;
+        │           │   └── <lista_instr> → ϵ
+        ├── <default>
+        │   └── default : <lista_instr> → ...
+        └── }
+```
+
+**2. AST — árvore de sintaxe ABSTRACTA** (aba "AST (simplificada)"): a
+derivação **sem pontuação nem nós de lista** — só a estrutura. É o
+"*can become*" dos slides: `if-statement(IF cond THEN stmt)` *can become*
+`if-statement(cond, stmt)`:
 
 ```
 PROGRAMA
-└── SWITCH (opcao)
-    ├── CASE 1
-    │   ├── =                ← nó da atribuição
-    │   │   ├── mensagem     ← destino
-    │   │   └── "um"         ← valor
-    │   └── BREAK
-    └── DEFAULT
+└── switch (opcao)
+    ├── case 1
+    │   ├── =
+    │   │   ├── mensagem
+    │   │   └── "um"
+    │   └── break
+    └── default
         └── =
             ├── mensagem
             └── "outro"
 ```
+
+**Porquê as duas?** A árvore de derivação prova que a sentença pertence à
+linguagem (cada nó cita uma regra da gramática); a AST é a que o compilador
+guarda em memória e que a análise semântica percorre — a pontuação já cumpriu
+o seu papel na fase sintáctica e é descartada. No código, a AST é a estrutura
+de objectos `Programa`/`ComandoSwitch`/`Caso`/... e a árvore de derivação é
+reconstruída para visualização seguindo as regras numeradas
+(`InterfaceGrafica.noListaDecl`, `noSwitch`, `noCaso`, ... — cada método tem
+a regra que implementa como comentário).
 
 ---
 

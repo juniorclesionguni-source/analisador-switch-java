@@ -11,6 +11,8 @@ import sintatico.Declaracao;
 import sintatico.Instrucao;
 import sintatico.Parser;
 import sintatico.Programa;
+import lexico.ClasseToken;
+import tabelas.Categoria;
 import tabelas.Simbolo;
 import tabelas.TabelaLexemas;
 import tabelas.TabelaSimbolos;
@@ -80,7 +82,8 @@ public class InterfaceGrafica extends JFrame {
     private final JTextArea numerosLinhas = new JTextArea("1");
     private final JTextArea codigoNumerado = new JTextArea();
     private final JTable tabelaLexemas = criarTabela();
-    private final PainelArvoreAst arvoreAst = new PainelArvoreAst();
+    private final PainelArvoreAst arvoreAst = new PainelArvoreAst();      // derivação (notação do docente)
+    private final PainelArvoreAst arvoreSimples = new PainelArvoreAst();  // AST simplificada
     private final JTable tabelaSimbolos = criarTabela();
     private final JTable tabelaErros = criarTabela();
     private final JTextField campoFicheiro = new JTextField();
@@ -183,7 +186,8 @@ public class InterfaceGrafica extends JFrame {
         abas.addTab("Lexemas", criarRolagem(tabelaLexemas));
         abas.addTab("Simbolos", criarRolagem(tabelaSimbolos));
         abas.addTab("Erros", criarRolagem(tabelaErros));
-        abas.addTab("Arvore (AST)", criarRolagem(arvoreAst));
+        abas.addTab("Arvore de sintaxe", criarRolagem(arvoreAst));
+        abas.addTab("AST (simplificada)", criarRolagem(arvoreSimples));
         abas.addTab("Gramatica", criarRolagem(criarPainelGramatica()));
 
         JScrollPane rolagemEditor = criarRolagem(editorFonte);
@@ -274,9 +278,21 @@ public class InterfaceGrafica extends JFrame {
         return tabela;
     }
 
-    // Constrói a árvore (nós + filhos) a partir da AST do parser: cadeia =
-    // switches irmãos sob PROGRAMA; aninhamento = SWITCH filho de um CASE.
+    // ÁRVORE DE SINTAXE (árvore de derivação) na notação do docente (F3/F5):
+    // a raiz é o símbolo inicial <programa>; cada nó não-terminal expande nos
+    // símbolos do lado direito da regra BNF aplicada; as folhas são os
+    // terminais (lexemas) e ϵ quando a regra é vazia.
     private void preencherArvore(Programa programa) {
+        NoDesenho raiz = new NoDesenho("<programa>");
+        raiz.filhos.add(noListaDecl(programa.declaracoes, 0));
+        raiz.filhos.add(noListaSwitch(programa.switches, 0));
+        arvoreAst.setRaiz(raiz);
+    }
+
+    // AST SIMPLIFICADA (abstract syntax tree): a derivação sem pontuação nem
+    // nós de lista — só a estrutura ("can become", como nos slides). Cadeia =
+    // switches irmãos sob PROGRAMA; aninhamento = switch filho de um case.
+    private void preencherArvoreSimples(Programa programa) {
         NoDesenho raiz = new NoDesenho("PROGRAMA");
         for (Declaracao d : programa.declaracoes) {
             NoDesenho decl = new NoDesenho("declaracao");
@@ -288,27 +304,27 @@ public class InterfaceGrafica extends JFrame {
             raiz.filhos.add(decl);
         }
         for (ComandoSwitch s : programa.switches) {
-            raiz.filhos.add(noSwitch(s));
+            raiz.filhos.add(noSwitchSimples(s));
         }
-        arvoreAst.setRaiz(raiz);
+        arvoreSimples.setRaiz(raiz);
     }
 
-    private NoDesenho noSwitch(ComandoSwitch s) {
+    private NoDesenho noSwitchSimples(ComandoSwitch s) {
         NoDesenho no = new NoDesenho("switch (" + s.selector + ")");
         for (Caso c : s.casos) {
-            no.filhos.add(noCaso(c));
+            no.filhos.add(noCasoSimples(c));
         }
         if (s.casoDefault != null) {
-            no.filhos.add(noCaso(s.casoDefault));
+            no.filhos.add(noCasoSimples(s.casoDefault));
         }
         return no;
     }
 
-    private NoDesenho noCaso(Caso c) {
+    private NoDesenho noCasoSimples(Caso c) {
         NoDesenho no = new NoDesenho(c.ehDefault ? "default" : "case " + c.rotuloLexema);
         for (Instrucao i : c.instrucoes) {
             if (i instanceof ComandoSwitch) {
-                no.filhos.add(noSwitch((ComandoSwitch) i)); // aninhamento
+                no.filhos.add(noSwitchSimples((ComandoSwitch) i)); // aninhamento
             } else if (i instanceof Atribuicao) {
                 Atribuicao a = (Atribuicao) i;
                 NoDesenho atr = new NoDesenho("=");
@@ -318,6 +334,146 @@ public class InterfaceGrafica extends JFrame {
             } else if (i instanceof ComandoBreak) {
                 no.filhos.add(new NoDesenho("break"));
             }
+        }
+        return no;
+    }
+
+    /** <lista_decl> ::= <declaracao> ; <lista_decl> | ϵ */
+    private NoDesenho noListaDecl(List<Declaracao> ds, int i) {
+        NoDesenho no = new NoDesenho("<lista_decl>");
+        if (i >= ds.size()) {
+            no.filhos.add(new NoDesenho("ϵ"));
+            return no;
+        }
+        no.filhos.add(noDeclaracao(ds.get(i)));
+        no.filhos.add(new NoDesenho(";"));
+        no.filhos.add(noListaDecl(ds, i + 1));
+        return no;
+    }
+
+    /** <declaracao> ::= <tipo> ident [= <valor>] | final <tipo> ident = <valor> */
+    private NoDesenho noDeclaracao(Declaracao d) {
+        NoDesenho no = new NoDesenho("<declaracao>");
+        if (d.categoria == Categoria.CONSTANTE) {
+            no.filhos.add(new NoDesenho("final"));
+        }
+        NoDesenho tipo = new NoDesenho("<tipo>");
+        tipo.filhos.add(new NoDesenho(d.tipo));
+        no.filhos.add(tipo);
+        no.filhos.add(new NoDesenho(d.identificador));
+        if (d.valorLexema != null) {
+            no.filhos.add(new NoDesenho("="));
+            no.filhos.add(noValor(d.valorLexema, d.valorClasse));
+        }
+        return no;
+    }
+
+    /** <valor> ::= <constante> | ident        <constante> ::= lit_int | lit_string */
+    private NoDesenho noValor(String lexema, ClasseToken classe) {
+        NoDesenho no = new NoDesenho("<valor>");
+        if (classe == ClasseToken.IDENTIFICADOR) {
+            no.filhos.add(new NoDesenho(lexema));
+        } else {
+            NoDesenho constante = new NoDesenho("<constante>");
+            constante.filhos.add(new NoDesenho(lexema));
+            no.filhos.add(constante);
+        }
+        return no;
+    }
+
+    /** <lista_switch> ::= <switch> <lista_switch> | <switch> */
+    private NoDesenho noListaSwitch(List<ComandoSwitch> ss, int i) {
+        NoDesenho no = new NoDesenho("<lista_switch>");
+        if (i < ss.size()) {
+            no.filhos.add(noSwitch(ss.get(i)));
+            if (i + 1 < ss.size()) {
+                no.filhos.add(noListaSwitch(ss, i + 1));
+            }
+        }
+        return no;
+    }
+
+    /** <switch> ::= switch ( <selector> ) { <lista_caso> [<default>] } */
+    private NoDesenho noSwitch(ComandoSwitch s) {
+        NoDesenho no = new NoDesenho("<switch>");
+        no.filhos.add(new NoDesenho("switch"));
+        no.filhos.add(new NoDesenho("("));
+        NoDesenho selector = new NoDesenho("<selector>");
+        selector.filhos.add(new NoDesenho(s.selector));
+        no.filhos.add(selector);
+        no.filhos.add(new NoDesenho(")"));
+        no.filhos.add(new NoDesenho("{"));
+        no.filhos.add(noListaCaso(s.casos, 0));
+        if (s.casoDefault != null) {
+            no.filhos.add(noDefault(s.casoDefault));
+        }
+        no.filhos.add(new NoDesenho("}"));
+        return no;
+    }
+
+    /** <lista_caso> ::= <caso> <lista_caso> | <caso> */
+    private NoDesenho noListaCaso(List<Caso> casos, int i) {
+        NoDesenho no = new NoDesenho("<lista_caso>");
+        if (i < casos.size()) {
+            no.filhos.add(noCaso(casos.get(i)));
+            if (i + 1 < casos.size()) {
+                no.filhos.add(noListaCaso(casos, i + 1));
+            }
+        }
+        return no;
+    }
+
+    /** <caso> ::= case <constante> : <lista_instr> */
+    private NoDesenho noCaso(Caso c) {
+        NoDesenho no = new NoDesenho("<caso>");
+        no.filhos.add(new NoDesenho("case"));
+        NoDesenho constante = new NoDesenho("<constante>");
+        constante.filhos.add(new NoDesenho(c.rotuloLexema));
+        no.filhos.add(constante);
+        no.filhos.add(new NoDesenho(":"));
+        no.filhos.add(noListaInstr(c.instrucoes, 0));
+        return no;
+    }
+
+    /** <default> ::= default : <lista_instr> */
+    private NoDesenho noDefault(Caso c) {
+        NoDesenho no = new NoDesenho("<default>");
+        no.filhos.add(new NoDesenho("default"));
+        no.filhos.add(new NoDesenho(":"));
+        no.filhos.add(noListaInstr(c.instrucoes, 0));
+        return no;
+    }
+
+    /** <lista_instr> ::= <instrucao> <lista_instr> | ϵ */
+    private NoDesenho noListaInstr(List<Instrucao> instrucoes, int i) {
+        NoDesenho no = new NoDesenho("<lista_instr>");
+        if (i >= instrucoes.size()) {
+            no.filhos.add(new NoDesenho("ϵ"));
+            return no;
+        }
+        no.filhos.add(noInstrucao(instrucoes.get(i)));
+        no.filhos.add(noListaInstr(instrucoes, i + 1));
+        return no;
+    }
+
+    /** <instrucao> ::= <switch> | <atribuicao> | <break> */
+    private NoDesenho noInstrucao(Instrucao instr) {
+        NoDesenho no = new NoDesenho("<instrucao>");
+        if (instr instanceof ComandoSwitch) {
+            no.filhos.add(noSwitch((ComandoSwitch) instr)); // aninhamento
+        } else if (instr instanceof Atribuicao) {
+            Atribuicao a = (Atribuicao) instr;
+            NoDesenho atr = new NoDesenho("<atribuicao>");
+            atr.filhos.add(new NoDesenho(a.destino));
+            atr.filhos.add(new NoDesenho("="));
+            atr.filhos.add(noValor(a.valorLexema, a.valorClasse));
+            atr.filhos.add(new NoDesenho(";"));
+            no.filhos.add(atr);
+        } else if (instr instanceof ComandoBreak) {
+            NoDesenho brk = new NoDesenho("<break>");
+            brk.filhos.add(new NoDesenho("break"));
+            brk.filhos.add(new NoDesenho(";"));
+            no.filhos.add(brk);
         }
         return no;
     }
@@ -340,15 +496,48 @@ public class InterfaceGrafica extends JFrame {
      */
     private static class PainelArvoreAst extends JPanel implements javax.swing.Scrollable {
 
-        private static final int ALTURA_NIVEL = 70; // distância vertical entre níveis
-        private static final int ESPACO = 40;       // espaço horizontal entre subárvores
+        private static final int ALTURA_NIVEL = 60;    // distância vertical entre níveis
+        private static final int ESPACO = 26;          // espaço horizontal entre subárvores
         private static final int MARGEM = 20;
+        private static final double ESCALA_MINIMA = 0.75; // nunca encolher abaixo disto (legibilidade)
 
         private NoDesenho raiz;
 
         PainelArvoreAst() {
             setBackground(LINHA_CLARA);
-            setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+            setFont(new Font(Font.SANS_SERIF, Font.BOLD, 15));
+        }
+
+        private int larguraArvore() {
+            FontMetrics fm = getFontMetrics(getFont());
+            return larguraSubarvore(raiz, fm) + 2 * MARGEM;
+        }
+
+        private int alturaArvore() {
+            return profundidade(raiz) * ALTURA_NIVEL + 2 * MARGEM;
+        }
+
+        /** Área visível do JScrollPane onde o painel está inserido. */
+        private Dimension areaVisivel() {
+            if (getParent() instanceof javax.swing.JViewport) {
+                return ((javax.swing.JViewport) getParent()).getExtentSize();
+            }
+            return getSize();
+        }
+
+        /**
+         * Tenta caber no ecrã (zoom-to-fit), mas nunca abaixo de ESCALA_MINIMA:
+         * a partir daí a legibilidade manda e o resto vê-se com o scroll.
+         */
+        private double escalaAtual() {
+            if (raiz == null) {
+                return 1.0;
+            }
+            Dimension vp = areaVisivel();
+            double fit = Math.min(1.0, Math.min(
+                    vp.width / (double) larguraArvore(),
+                    vp.height / (double) alturaArvore()));
+            return Math.max(ESCALA_MINIMA, fit);
         }
 
         void setRaiz(NoDesenho raiz) {
@@ -364,14 +553,16 @@ public class InterfaceGrafica extends JFrame {
             return getPreferredSize();
         }
 
+        // Só "cola" ao viewport quando a árvore (escalada) cabe nele; caso
+        // contrário o painel fica maior e o JScrollPane mostra as barras.
         @Override
         public boolean getScrollableTracksViewportWidth() {
-            return true;
+            return getPreferredSize().width <= areaVisivel().width;
         }
 
         @Override
         public boolean getScrollableTracksViewportHeight() {
-            return true;
+            return getPreferredSize().height <= areaVisivel().height;
         }
 
         @Override
@@ -411,10 +602,10 @@ public class InterfaceGrafica extends JFrame {
             if (raiz == null) {
                 return new Dimension(400, 300);
             }
-            FontMetrics fm = getFontMetrics(getFont());
+            double escala = escalaAtual();
             return new Dimension(
-                    larguraSubarvore(raiz, fm) + 2 * MARGEM,
-                    profundidade(raiz) * ALTURA_NIVEL + 2 * MARGEM);
+                    (int) Math.ceil(larguraArvore() * escala),
+                    (int) Math.ceil(alturaArvore() * escala));
         }
 
         @Override
@@ -429,16 +620,10 @@ public class InterfaceGrafica extends JFrame {
             g2.setStroke(new BasicStroke(1.4f));
             FontMetrics fm = g2.getFontMetrics();
 
-            // Zoom-to-fit: se a árvore for maior que o painel, reduz a escala
-            // para caber TODA no ecrã (nunca amplia acima de 1:1).
-            int larguraArvore = larguraSubarvore(raiz, fm) + 2 * MARGEM;
-            int alturaArvore = profundidade(raiz) * ALTURA_NIVEL + 2 * MARGEM;
-            double escala = Math.min(1.0, Math.min(
-                    getWidth() / (double) larguraArvore,
-                    getHeight() / (double) alturaArvore));
+            double escala = escalaAtual();
 
-            // Centra horizontalmente o espaço que sobra.
-            double sobraX = getWidth() - larguraArvore * escala;
+            // Centra horizontalmente o espaço que sobra (quando a árvore cabe).
+            double sobraX = getWidth() - larguraArvore() * escala;
             g2.translate(Math.max(0, sobraX / 2), 0);
             g2.scale(escala, escala);
 
@@ -698,6 +883,7 @@ public class InterfaceGrafica extends JFrame {
         preencherCodigoNumerado(fonte);
         preencherLexemas(resultado.tokens);
         preencherArvore(resultado.programa);
+        preencherArvoreSimples(resultado.programa);
         preencherSimbolos(resultado.simbolos);
         preencherErros(resultado.erros);
 
