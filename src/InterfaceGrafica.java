@@ -184,6 +184,7 @@ public class InterfaceGrafica extends JFrame {
         abas.addTab("Arvore (AST)", criarRolagem(arvoreAst));
         abas.addTab("Simbolos", criarRolagem(tabelaSimbolos));
         abas.addTab("Erros", criarRolagem(tabelaErros));
+        abas.addTab("Gramatica", criarRolagem(criarPainelGramatica()));
 
         JScrollPane rolagemEditor = criarRolagem(editorFonte);
         rolagemEditor.setRowHeaderView(numerosLinhas);
@@ -477,6 +478,48 @@ public class InterfaceGrafica extends JFrame {
             }
             return Math.max(0, soma - ESPACO);
         }
+    }
+
+    /** Aba com a gramática formal (BNF) que o parser implementa. */
+    private JTextArea criarPainelGramatica() {
+        JTextArea area = new JTextArea(
+                "GRAMÁTICA DA LINGUAGEM (BNF)\n" +
+                "============================\n\n" +
+                "PROGRAMA      → LISTA_DECL LISTA_SWITCH\n\n" +
+                "LISTA_DECL    → DECLARACAO ';' LISTA_DECL | ε\n" +
+                "DECLARACAO    → TIPO IDENT [ '=' VALOR ]              (variável)\n" +
+                "              | 'final' TIPO IDENT '=' VALOR          (constante)\n" +
+                "TIPO          → 'int' | 'String'\n\n" +
+                "LISTA_SWITCH  → SWITCH LISTA_SWITCH | SWITCH          (≥1 → cadeia)\n" +
+                "SWITCH        → 'switch' '(' SELECTOR ')' '{' LISTA_CASO [ DEFAULT ] '}'\n" +
+                "SELECTOR      → IDENT\n" +
+                "LISTA_CASO    → CASO LISTA_CASO | CASO\n" +
+                "CASO          → 'case' CONSTANTE ':' LISTA_INSTR\n" +
+                "DEFAULT       → 'default' ':' LISTA_INSTR\n" +
+                "LISTA_INSTR   → INSTRUCAO LISTA_INSTR | ε\n" +
+                "INSTRUCAO     → SWITCH | ATRIBUICAO | BREAK           (aninhamento via SWITCH)\n" +
+                "ATRIBUICAO    → IDENT '=' VALOR ';'\n" +
+                "BREAK         → 'break' ';'\n\n" +
+                "VALOR         → CONSTANTE | IDENT\n" +
+                "CONSTANTE     → LIT_INT | LIT_STRING\n\n" +
+                "IDENT         → letra ( letra | dígito )*\n" +
+                "LIT_INT       → [ '-' ] dígito+\n" +
+                "LIT_STRING    → '\"' (qualquer carácter excepto '\"')* '\"'\n\n" +
+                "Notação: → produção   | alternativa   [ ] opcional   ε vazio\n\n" +
+                "TIPO DE GRAMÁTICA\n" +
+                "=================\n" +
+                "Gramática LIVRE DE CONTEXTO (Tipo 2 de Chomsky), escrita em BNF,\n" +
+                "com a propriedade LL(1): basta 1 token de lookahead para escolher\n" +
+                "a produção, sem ambiguidade nem backtracking. É isso que permite\n" +
+                "implementá-la como parser DESCENDENTE RECURSIVO — cada não-terminal\n" +
+                "é um método do Parser.java.\n"
+        );
+        area.setEditable(false);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+        area.setBackground(LINHA_CLARA);
+        area.setForeground(CAFE_ESCURO);
+        area.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        return area;
     }
 
     private JPanel criarSecao(String titulo, Component conteudo) {

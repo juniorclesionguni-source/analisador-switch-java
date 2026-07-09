@@ -73,6 +73,19 @@ seguinte (`dia = "ola"`, linha 9).
 
 ## 4. Perguntas e respostas prováveis
 
+**P0. Que tipo de gramática é esta?**
+É uma **gramática livre de contexto** (GLC, Tipo 2 na hierarquia de Chomsky):
+todas as produções têm um único não-terminal à esquerda (`A → α`). É o tipo
+usado para a sintaxe de linguagens de programação porque expressa estruturas
+recursivas/aninhadas (switch dentro de switch), o que uma gramática regular
+(Tipo 3) não consegue — os tokens em si é que são regulares, e por isso ficam
+a cargo do lexer. A notação é **BNF** (com o `[ ]` opcional emprestado do
+EBNF). Além disso a gramática é **LL(1)**: lendo a entrada da esquerda para a
+direita, basta **1 token de lookahead** para escolher a produção (se o token é
+`switch`, `final`, `case` ou `break`, cada um determina uma regra diferente),
+sem ambiguidade nem backtracking — e é exactamente essa propriedade que
+permite implementá-la como parser descendente recursivo.
+
 **P1. Porque é um analisador descendente recursivo e não tabular (LR)?**
 Porque a gramática é pequena, LL(1) e fácil de mapear: cada não-terminal vira
 um método e a recursão da linguagem (switch dentro de switch) vira recursão de
