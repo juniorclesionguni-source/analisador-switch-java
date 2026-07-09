@@ -483,29 +483,47 @@ public class InterfaceGrafica extends JFrame {
     /** Aba com a gramática formal (BNF) que o parser implementa. */
     private JTextArea criarPainelGramatica() {
         JTextArea area = new JTextArea(
-                "GRAMÁTICA DA LINGUAGEM (BNF)\n" +
-                "============================\n\n" +
-                "PROGRAMA      → LISTA_DECL LISTA_SWITCH\n\n" +
-                "LISTA_DECL    → DECLARACAO ';' LISTA_DECL | ε\n" +
-                "DECLARACAO    → TIPO IDENT [ '=' VALOR ]              (variável)\n" +
-                "              | 'final' TIPO IDENT '=' VALOR          (constante)\n" +
-                "TIPO          → 'int' | 'String'\n\n" +
-                "LISTA_SWITCH  → SWITCH LISTA_SWITCH | SWITCH          (≥1 → cadeia)\n" +
-                "SWITCH        → 'switch' '(' SELECTOR ')' '{' LISTA_CASO [ DEFAULT ] '}'\n" +
-                "SELECTOR      → IDENT\n" +
-                "LISTA_CASO    → CASO LISTA_CASO | CASO\n" +
-                "CASO          → 'case' CONSTANTE ':' LISTA_INSTR\n" +
-                "DEFAULT       → 'default' ':' LISTA_INSTR\n" +
-                "LISTA_INSTR   → INSTRUCAO LISTA_INSTR | ε\n" +
-                "INSTRUCAO     → SWITCH | ATRIBUICAO | BREAK           (aninhamento via SWITCH)\n" +
-                "ATRIBUICAO    → IDENT '=' VALOR ';'\n" +
-                "BREAK         → 'break' ';'\n\n" +
-                "VALOR         → CONSTANTE | IDENT\n" +
-                "CONSTANTE     → LIT_INT | LIT_STRING\n\n" +
-                "IDENT         → letra ( letra | dígito )*\n" +
-                "LIT_INT       → [ '-' ] dígito+\n" +
-                "LIT_STRING    → '\"' (qualquer carácter excepto '\"')* '\"'\n\n" +
-                "Notação: → produção   | alternativa   [ ] opcional   ε vazio\n\n" +
+                "GRAMÁTICA DA LINGUAGEM — NOTAÇÃO BNF (FORMA DE BACKUS-NAUR)\n" +
+                "===========================================================\n\n" +
+                "P:\n" +
+                " 1. <programa>     ::= <lista_decl> <lista_switch>\n" +
+                " 2. <lista_decl>   ::= <declaracao> ; <lista_decl>\n" +
+                " 3. <lista_decl>   ::= ϵ\n" +
+                " 4. <declaracao>   ::= <tipo> ident\n" +
+                " 5. <declaracao>   ::= <tipo> ident = <valor>\n" +
+                " 6. <declaracao>   ::= final <tipo> ident = <valor>\n" +
+                " 7. <tipo>         ::= int\n" +
+                " 8. <tipo>         ::= String\n" +
+                " 9. <lista_switch> ::= <switch> <lista_switch>\n" +
+                "10. <lista_switch> ::= <switch>\n" +
+                "11. <switch>       ::= switch ( <selector> ) { <lista_caso> }\n" +
+                "12. <switch>       ::= switch ( <selector> ) { <lista_caso> <default> }\n" +
+                "13. <selector>     ::= ident\n" +
+                "14. <lista_caso>   ::= <caso> <lista_caso>\n" +
+                "15. <lista_caso>   ::= <caso>\n" +
+                "16. <caso>         ::= case <constante> : <lista_instr>\n" +
+                "17. <default>      ::= default : <lista_instr>\n" +
+                "18. <lista_instr>  ::= <instrucao> <lista_instr>\n" +
+                "19. <lista_instr>  ::= ϵ\n" +
+                "20. <instrucao>    ::= <switch>\n" +
+                "21. <instrucao>    ::= <atribuicao>\n" +
+                "22. <instrucao>    ::= <break>\n" +
+                "23. <atribuicao>   ::= ident = <valor> ;\n" +
+                "24. <break>        ::= break ;\n" +
+                "25. <valor>        ::= <constante>\n" +
+                "26. <valor>        ::= ident\n" +
+                "27. <constante>    ::= lit_int\n" +
+                "28. <constante>    ::= lit_string\n\n" +
+                "G = ({<programa>, <lista_decl>, <declaracao>, <tipo>, <lista_switch>,\n" +
+                "      <switch>, <selector>, <lista_caso>, <caso>, <default>,\n" +
+                "      <lista_instr>, <instrucao>, <atribuicao>, <break>, <valor>,\n" +
+                "      <constante>},\n" +
+                "     {switch, case, default, break, int, String, final,\n" +
+                "      ident, lit_int, lit_string, =, (, ), {, }, :, ;},\n" +
+                "     P, <programa>)\n\n" +
+                "Não-terminais: abstracções entre < >     Terminais: lexemas/tokens\n" +
+                "Regra 20: um <switch> é uma <instrucao> → ANINHAMENTO\n" +
+                "Regra  9: <lista_switch> recursiva → switches em CADEIA\n\n" +
                 "TIPO DE GRAMÁTICA\n" +
                 "=================\n" +
                 "Gramática LIVRE DE CONTEXTO (Tipo 2 de Chomsky), escrita em BNF,\n" +

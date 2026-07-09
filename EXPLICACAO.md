@@ -71,28 +71,53 @@ parser tenha de testar "acabou a lista?" a cada passo.
 **O que faz:** verifica se a **ordem** dos tokens obedece à gramática e, ao
 mesmo tempo, **constrói a AST**.
 
-### A gramática (BNF)
+### A gramática (notação BNF — Forma de Backus-Naur)
+
+Na notação usada nas aulas: não-terminais entre `< >`, `::=`, cada
+alternativa como regra numerada, `ϵ` para vazio, e a gramática como quádruplo
+`G = (Vn, Vt, P, S)`.
 
 ```
-PROGRAMA      → LISTA_DECL LISTA_SWITCH
-LISTA_DECL    → DECLARACAO ';' LISTA_DECL | ε
-DECLARACAO    → TIPO IDENT [ '=' VALOR ]                 (variável)
-              | 'final' TIPO IDENT '=' VALOR             (constante)
-TIPO          → 'int' | 'String'
+P:
+ 1. <programa>     ::= <lista_decl> <lista_switch>
+ 2. <lista_decl>   ::= <declaracao> ; <lista_decl>
+ 3. <lista_decl>   ::= ϵ
+ 4. <declaracao>   ::= <tipo> ident
+ 5. <declaracao>   ::= <tipo> ident = <valor>
+ 6. <declaracao>   ::= final <tipo> ident = <valor>
+ 7. <tipo>         ::= int
+ 8. <tipo>         ::= String
+ 9. <lista_switch> ::= <switch> <lista_switch>
+10. <lista_switch> ::= <switch>
+11. <switch>       ::= switch ( <selector> ) { <lista_caso> }
+12. <switch>       ::= switch ( <selector> ) { <lista_caso> <default> }
+13. <selector>     ::= ident
+14. <lista_caso>   ::= <caso> <lista_caso>
+15. <lista_caso>   ::= <caso>
+16. <caso>         ::= case <constante> : <lista_instr>
+17. <default>      ::= default : <lista_instr>
+18. <lista_instr>  ::= <instrucao> <lista_instr>
+19. <lista_instr>  ::= ϵ
+20. <instrucao>    ::= <switch>
+21. <instrucao>    ::= <atribuicao>
+22. <instrucao>    ::= <break>
+23. <atribuicao>   ::= ident = <valor> ;
+24. <break>        ::= break ;
+25. <valor>        ::= <constante>
+26. <valor>        ::= ident
+27. <constante>    ::= lit_int
+28. <constante>    ::= lit_string
 
-LISTA_SWITCH  → SWITCH LISTA_SWITCH | SWITCH             (≥1 → cadeia)
-SWITCH        → 'switch' '(' SELECTOR ')' '{' LISTA_CASO [ DEFAULT ] '}'
-SELECTOR      → IDENT
-LISTA_CASO    → CASO LISTA_CASO | CASO
-CASO          → 'case' CONSTANTE ':' LISTA_INSTR
-DEFAULT       → 'default' ':' LISTA_INSTR
-LISTA_INSTR   → INSTRUCAO LISTA_INSTR | ε
-INSTRUCAO     → SWITCH | ATRIBUICAO | BREAK              (aninhamento!)
-ATRIBUICAO    → IDENT '=' VALOR ';'
-BREAK         → 'break' ';'
-VALOR         → CONSTANTE | IDENT
-CONSTANTE     → LIT_INT | LIT_STRING
+G = ({<programa>, <lista_decl>, <declaracao>, <tipo>, <lista_switch>,
+      <switch>, <selector>, <lista_caso>, <caso>, <default>, <lista_instr>,
+      <instrucao>, <atribuicao>, <break>, <valor>, <constante>},
+     {switch, case, default, break, int, String, final,
+      ident, lit_int, lit_string, =, (, ), {, }, :, ;},
+     P, <programa>)
 ```
+
+- Regra **20** (`<instrucao> ::= <switch>`) → **aninhamento** sem limite.
+- Regra **9** (`<lista_switch>` recursiva) → switches em **cadeia**.
 
 ### Parser descendente recursivo
 
